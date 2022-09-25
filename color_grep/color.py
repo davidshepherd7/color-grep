@@ -25,20 +25,21 @@ class sRGBColor:
     NOTE: rgb values are in the 0-255 range (not the 0-1 range).
     """
 
-    r: float
-    g: float
-    b: float
+    r: int
+    g: int
+    b: int
 
     @staticmethod
     def from_string(rgb: str) -> "sRGBColor":
-        rgb = rgb.rstrip("#")
-        if not re.match("[0-9A-F]{6}", rgb, re.IGNORECASE):
+        if not re.match("#[0-9A-F]{6}", rgb, re.IGNORECASE):
             raise ValueError(f"Not an rgb color: {rgb}")
-        rgb_bytes = rgb.encode("ascii")
 
         return sRGBColor(
-            r=int(rgb[0:2], base=16), g=int(rgb[2:4], base=16), b=int(rgb[4:6], base=16)
+            r=int(rgb[1:3], base=16), g=int(rgb[3:5], base=16), b=int(rgb[5:7], base=16)
         )
+
+    def to_string(self) -> str:
+        return f"#{self.r:02X}{self.g:02X}{self.b:02X}"
 
     def to_xyz(self) -> "CIEXYZColor":
         """Copied from https://www.easyrgb.com/en/math.php
