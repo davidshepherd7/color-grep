@@ -1,6 +1,6 @@
 # Color-grep
 
-Search your code for colors which are visually similar to an input.
+Search your code for colors which are visually similar to input colors.
 
 
 Typical usage is something like:
