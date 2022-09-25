@@ -19,10 +19,11 @@ class sRGBColor:
     sRGB is "standard RGB", which is what most software pepole will mean when
     they say RGB. Technically you can define infinitely many RGB spaces by
     choosing a few key points like "black" and "red-est red". Luckily for us
-    some big computer corporations got together in the TODO year and defined a
-    standard space for RGB, and that's what we all use.
+    Microsoft and HP got together in 1996 and defined a standard space for RGB,
+    and that's what we all use these days.
 
     NOTE: rgb values are in the 0-255 range (not the 0-1 range).
+
     """
 
     r: int
@@ -137,7 +138,7 @@ class CIELabColor:
     b: float
 
 
-def CieLab2Hue(var_a: float, var_b: float) -> float:
+def _cie_lab_to_hue(var_a: float, var_b: float) -> float:
     """          //Function returns CIE-H° value"""
     var_bias = 0
     if var_a >= 0 and var_b == 0:
@@ -173,10 +174,10 @@ def visual_diff(c1: CIELabColor, c2: CIELabColor) -> float:
     xGX = 0.5 * (1 - sqrt((xCX ** 7) / ((xCX ** 7) + (25 ** 7))))
     xNN = (1 + xGX) * c1.a
     xC1 = sqrt(xNN * xNN + c1.b * c1.b)
-    xH1 = CieLab2Hue(xNN, c1.b)
+    xH1 = _cie_lab_to_hue(xNN, c1.b)
     xNN = (1 + xGX) * c2.a
     xC2 = sqrt(xNN * xNN + c2.b * c2.b)
-    xH2 = CieLab2Hue(xNN, c2.b)
+    xH2 = _cie_lab_to_hue(xNN, c2.b)
     xDL = c2.L - c1.L
     xDC = xC2 - xC1
 

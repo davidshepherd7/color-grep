@@ -7,8 +7,6 @@ import itertools as it
 
 from .color import sRGBColor, visual_diff
 
-# TODO: Multiple base colors
-
 # TODO: validate color matching
 
 # TODO: column numbers?
@@ -34,13 +32,34 @@ class Args:
 
 
 def parse_arguments(argv: List[str]) -> Args:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="Search files for RGB colors which are visually similar to those specified."
+    )
 
-    parser.add_argument("files", default=None, help="", nargs="+")
-    parser.add_argument("--color", help="", type=sRGBColor.from_string, action="append")
-    parser.add_argument("--distance", default=0.9, type=float)
-    parser.add_argument("--html", default=None)
-    parser.add_argument("--exclude-identical", default=False, action="store_true")
+    parser.add_argument("files", default=None, nargs="+")
+    parser.add_argument(
+        "--color",
+        help="sRGB colors to search for, should start with a # symbol. Can be specified many times.",
+        type=sRGBColor.from_string,
+        action="append",
+    )
+    parser.add_argument(
+        "--distance",
+        default=0.9,
+        type=float,
+        help="The maximum 'distance' to consider a color as similar, 1 is defined as being a just noticable difference by an average person (uses the CIE Delta E 2000 metric).",
+    )
+    parser.add_argument(
+        "--html",
+        default=None,
+        help="Write out an html summary of the results, very useful for comparing colors.",
+    )
+    parser.add_argument(
+        "--exclude-identical",
+        default=False,
+        action="store_true",
+        help="Exclude exact matches from the results.",
+    )
 
     args = parser.parse_args(argv)
     return cast(Args, args)
