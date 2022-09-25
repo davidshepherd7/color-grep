@@ -1,0 +1,6 @@
+#! /usr/bin/env python3
+
+import color_grep
+import sys
+
+sys.exit(color_grep.main(sys.argv[1:]))
