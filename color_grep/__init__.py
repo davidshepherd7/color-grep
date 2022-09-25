@@ -26,8 +26,8 @@ __version__ = "0.1.0"
 
 
 class Args:
-    color: sRGBColor
     files: List[str]
+    color: List[sRGBColor]
     distance: float
     html: Optional[str]
     exclude_identical: bool
@@ -37,10 +37,10 @@ def parse_arguments(argv: List[str]) -> Args:
     parser = argparse.ArgumentParser()
 
     parser.add_argument("files", default=None, help="", nargs="+")
-    parser.add_argument("--color", help="", type=sRGBColor.from_string)
+    parser.add_argument("--color", help="", type=sRGBColor.from_string, action="append")
     parser.add_argument("--distance", default=0.9, type=float)
     parser.add_argument("--html", default=None)
-    parser.add_argument("--exclude-identical", default=False)
+    parser.add_argument("--exclude-identical", default=False, action="store_true")
 
     args = parser.parse_args(argv)
     return cast(Args, args)
@@ -62,26 +62,34 @@ class Result:
 
 
 def process_file(
-    filename: str, base_color: sRGBColor, max_distance: float, exclude_identical: bool
+    filename: str,
+    base_colors: List[sRGBColor],
+    max_distance: float,
+    exclude_identical: bool,
 ) -> List[Result]:
     out: List[Result] = []
     with open(filename) as f:
         for i, line in enumerate(f.readlines(), start=1):
             for match in re.findall(rgb_regex, line):
-                color = sRGBColor.from_string(match)
-                distance = visual_diff(color.to_cielab(), base_color.to_cielab())
-                excluded_because_identical = exclude_identical and color == base_color
-                if distance < max_distance and not excluded_because_identical:
-                    out.append(
-                        Result(
-                            filename=filename,
-                            line_number=i,
-                            matched_text=match,
-                            color=color,
-                            base_color=base_color,
-                            distance=distance,
-                        )
+                match_color = sRGBColor.from_string(match)
+                for base_color in base_colors:
+                    distance = visual_diff(
+                        match_color.to_cielab(), base_color.to_cielab()
                     )
+                    excluded_because_identical = (
+                        exclude_identical and match_color == base_color
+                    )
+                    if distance < max_distance and not excluded_because_identical:
+                        out.append(
+                            Result(
+                                filename=filename,
+                                line_number=i,
+                                matched_text=match,
+                                color=match_color,
+                                base_color=base_color,
+                                distance=distance,
+                            )
+                        )
 
     return out
 
