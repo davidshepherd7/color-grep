@@ -7,29 +7,40 @@ import itertools as it
 
 from .color import sRGBColor, visual_diff
 
-# TODO: print the colors
+# TODO: Multiple base colors
 
 # TODO: validate color matching
 
+# TODO: column numbers?
+
 # TODO support alpha similarity as well?
+
+# TODO: match all colors in project against all?
+
+# TODO: non-rgb color schemes?
+
+# TODO: include named colors? html? android?
+
 
 __version__ = "0.1.0"
 
 
 class Args:
-    base_color: sRGBColor
+    color: sRGBColor
     files: List[str]
     distance: float
     html: Optional[str]
+    exclude_identical: bool
 
 
 def parse_arguments(argv: List[str]) -> Args:
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("base_color", default=None, help="", type=sRGBColor.from_string)
     parser.add_argument("files", default=None, help="", nargs="+")
+    parser.add_argument("--color", help="", type=sRGBColor.from_string)
     parser.add_argument("--distance", default=0.9, type=float)
     parser.add_argument("--html", default=None)
+    parser.add_argument("--exclude-identical", default=False)
 
     args = parser.parse_args(argv)
     return cast(Args, args)
@@ -46,11 +57,12 @@ class Result:
     # column_number: int
     matched_text: str
     color: sRGBColor
+    base_color: sRGBColor
     distance: float
 
 
 def process_file(
-    filename: str, base_color: sRGBColor, max_distance: float
+    filename: str, base_color: sRGBColor, max_distance: float, exclude_identical: bool
 ) -> List[Result]:
     out: List[Result] = []
     with open(filename) as f:
@@ -58,21 +70,31 @@ def process_file(
             for match in re.findall(rgb_regex, line):
                 color = sRGBColor.from_string(match)
                 distance = visual_diff(color.to_cielab(), base_color.to_cielab())
-                if distance < max_distance:
-                    out.append(Result(filename, i, match, color, distance))
+                excluded_because_identical = exclude_identical and color == base_color
+                if distance < max_distance and not excluded_because_identical:
+                    out.append(
+                        Result(
+                            filename=filename,
+                            line_number=i,
+                            matched_text=match,
+                            color=color,
+                            base_color=base_color,
+                            distance=distance,
+                        )
+                    )
 
     return out
 
 
-def html_formatter(results: List[Result], base_color: sRGBColor) -> str:
+def html_formatter(results: List[Result]) -> str:
     def html_color_block(color: sRGBColor) -> str:
         return f"""<span style="color: {color.to_string()}; font-size: 5em">&#9632;</span>"""
 
     def as_html(result: Result) -> str:
         return f"""
         <li>
-            Found similar color to input: {base_color.to_string()} ->
-            {html_color_block(base_color)}{html_color_block(result.color)} <- {result.color.to_string()}
+            Found color {result.distance} from input: {result.base_color.to_string()} ->
+            {html_color_block(result.base_color)}{html_color_block(result.color)} <- {result.color.to_string()}
              on line {result.line_number} of {result.filename}
         </li>
         """
@@ -97,16 +119,23 @@ def main(argv: List[str]) -> int:
     args = parse_arguments(argv)
 
     results = list(
-        it.chain(*[process_file(f, args.base_color, args.distance) for f in args.files])
+        it.chain(
+            *[
+                process_file(f, args.color, args.distance, args.exclude_identical)
+                for f in args.files
+            ]
+        )
     )
 
     for r in results:
-        print(f"{r.filename}:{r.line_number} Match {r.matched_text}")
+        print(
+            f"{r.filename}:{r.line_number} Match {r.matched_text} against {r.base_color.to_string()}, distance {r.distance}"
+        )
 
     if args.html is not None:
         if len(results) > 0:
             with open(args.html, "w") as f:
-                f.write(html_formatter(results, args.base_color))
+                f.write(html_formatter(results))
             print(f"Wrote output to file {args.html}", file=sys.stderr)
         else:
             # TODO: maybe write just a placeholder instead?
