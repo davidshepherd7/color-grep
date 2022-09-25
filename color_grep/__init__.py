@@ -1,29 +1,29 @@
 import argparse
 import re
-from typing import List, Optional, Any, Tuple
+from typing import List, Optional, Any, Tuple, cast
 from dataclasses import dataclass
 
 # TODO support alpha?
 
 __version__ = "0.1.0"
 
-# TODO check this worked
+
 class Args(argparse.Namespace):
     base_color: sRGBColor
     files: List[str]
-    epsilon: float
+    distance: float
 
 
-def parse_arguments(argv: List[str]) -> Any:
+def parse_arguments(argv: List[str]) -> Args:
     parser = argparse.ArgumentParser()
 
     parser.add_argument("base_color", default=None, help="", type=sRGBColor.from_string)
     parser.add_argument("files", default=None, help="", nargs="*")
-    parser.add_argument("--epsilon", default=0.5, type=float)  # TODO: pick a
-    # sensible epsilon
+    parser.add_argument("--distance", default=0.5, type=float)  # TODO: pick a
+    # sensible distance
 
     args = parser.parse_args(argv)
-    return args
+    return cast(Args, args)
 
 
 # Ascii only probably gets us some perf, check this
@@ -162,19 +162,115 @@ class CIELabColor:
     b: float
 
 
+from math import sqrt, cos, sin, exp, atan, degrees, radians
+
+
+def CieLab2Hue(var_a: float, var_b: float) -> float:
+    """          //Function returns CIE-H° value"""
+    var_bias = 0
+    if var_a >= 0 and var_b == 0:
+        return 0
+    if var_a < 0 and var_b == 0:
+        return 180
+    if var_a == 0 and var_b > 0:
+        return 90
+    if var_a == 0 and var_b < 0:
+        return 270
+
+    if var_a > 0 and var_b > 0:
+        var_bias = 0
+    if var_a < 0:
+        var_bias = 180
+    if var_a > 0 and var_b < 0:
+        var_bias = 360
+    return degrees(atan(var_b / var_a)) + var_bias
+
+
 def visual_diff(c1: CIELabColor, c2: CIELabColor) -> float:
-    # TOOD
-    return 1.0
+    """The CIE delta-E 2000 metric.
+
+    A distance of 1.0 is "just noticable".
+
+    From https://www.easyrgb.com/en/math.php again, with weights set to 1
+    (Wikipedia says that they are usually all set to 1).
+    """
+
+    xC1 = sqrt(c1.a * c1.a + c1.b * c1.b)
+    xC2 = sqrt(c2.a * c2.a + c2.b * c2.b)
+    xCX = (xC1 + xC2) / 2
+    xGX = 0.5 * (1 - sqrt((xCX ** 7) / ((xCX ** 7) + (25 ** 7))))
+    xNN = (1 + xGX) * c1.a
+    xC1 = sqrt(xNN * xNN + c1.b * c1.b)
+    xH1 = CieLab2Hue(xNN, c1.b)
+    xNN = (1 + xGX) * c2.a
+    xC2 = sqrt(xNN * xNN + c2.b * c2.b)
+    xH2 = CieLab2Hue(xNN, c2.b)
+    xDL = c2.L - c1.L
+    xDC = xC2 - xC1
+
+    xDH: float
+    if (xC1 * xC2) == 0:
+        xDH = 0
+
+    else:
+        xNN = round(xH2 - xH1, 12)
+        if abs(xNN) <= 180:
+            xDH = xH2 - xH1
+        else:
+            if xNN > 180:
+                xDH = xH2 - xH1 - 360
+            else:
+                xDH = xH2 - xH1 + 360
+
+    xDH = 2 * sqrt(xC1 * xC2) * sin(radians(xDH / 2))
+    xLX = (c1.L + c2.L) / 2
+    xCY = (xC1 + xC2) / 2
+    if (xC1 * xC2) == 0:
+        xHX = xH1 + xH2
+
+    else:
+        xNN = abs(round(xH1 - xH2, 12))
+        if xNN > 180:
+            if (xH2 + xH1) < 360:
+                xHX = xH1 + xH2 + 360
+            else:
+                xHX = xH1 + xH2 - 360
+
+        else:
+            xHX = xH1 + xH2
+
+        xHX /= 2
+
+    xTX = 1 - (
+        0.17 * cos(radians(xHX - 30))
+        + 0.24 * cos(radians(2 * xHX))
+        + 0.32 * cos(radians(3 * xHX + 6))
+        - 0.20 * cos(radians(4 * xHX - 63))
+    )
+    xPH = 30 * exp(-((xHX - 275) / 25) * ((xHX - 275) / 25))
+    xRC = 2 * sqrt((xCY ** 7) / ((xCY ** 7) + (25 ** 7)))
+    xSL = 1 + (
+        (0.015 * ((xLX - 50) * (xLX - 50))) / sqrt(20 + ((xLX - 50) * (xLX - 50)))
+    )
+
+    xSC = 1 + 0.045 * xCY
+    xSH = 1 + 0.015 * xCY * xTX
+    xRT = -sin(radians(2 * xPH)) * xRC
+    xDL = xDL / xSL
+    xDC = xDC / xSC
+    xDH = xDH / xSH
+
+    return sqrt(xDL ** 2 + xDC ** 2 + xDH ** 2 + xRT * xDC * xDH)
 
 
-def process_line(line: str, base_color: sRGBColor, epsilon: float) -> List[sRGBColor]:
+def process_line(line: str, base_color: sRGBColor, distance: float) -> List[sRGBColor]:
     color_strings = re.findall(rgb_regex, line)
     colors = [sRGBColor.from_string(m) for m in color_strings]
     # TODO: find colnm, text context + inclde
     return [
         c
         for c in colors
-        if visual_diff(c.to_cielab(), base_color.to_cielab()) < epsilon
+        if visual_diff(c.to_cielab(), base_color.to_cielab()) < distance
     ]
 
 
@@ -185,7 +281,7 @@ def main(argv: List[str]) -> int:
         with open(filename) as f:
             for line in f.readlines():
                 similar_colors = process_line(
-                    line, args.base_color, epsilon=args.epsilon
+                    line, args.base_color, distance=args.distance
                 )
                 for c in similar_colors:
                     print("{filenme}:{linum} Match {c.to_rgb}")
